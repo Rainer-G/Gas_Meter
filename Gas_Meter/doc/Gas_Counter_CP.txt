@@ -1,0 +1,266 @@
+
+//**************************************************************************
+//
+//  read RTC counting GAS Volume using I²C and WEMOS D! R2 mini
+//
+//  no library needed for real time clock PCF8583 with RAM
+//
+//  Use RTC as counter and read results with TWI
+//  Store last value in RAM
+//
+//**************************************************************************
+
+
+--> These libraries are needed
+
+#include <Wire.h>
+#include "Gas_Thingspeak.h"                                // if you don't want to use Thigspeak, just remove this include and all related calls/data 
+
+--> these modules hold some functions for the related topic
+
+#include "Gas_WiFi.h"
+#include "Gas_MQTT.h"
+#include "Gas_Time.h"
+
+--> these GPIO are used
+
+#define RESET_PIN            D7                             // LOW will reset the counter and clear old data
+#define UPDATE_PIN           D6                             // LOW will prevent going to sleep, needed for MQTT Commands & OTA updates
+
+--> these are the RAM addresses used
+
+#define CONTROL_ADDRESS      0x00
+#define ADDRESS_COUNTER      0x01                           // only 3 bytes with 6 BCD digits
+
+--> starting from 0x10, we have 240 bytes of RAM for free use
+
+#define RAM_OFFSET           0x10                           // start after reserved RAM locations
+#define ADDRESS_OLD_COUNTER  RAM_OFFSET                     // provide 4 bytes
+#define ADDRESS_OLD_TIME     ADDRESS_OLD_COUNTER   + 4      // provide 4 bytes
+#define ADDRESS_OLD_DATE     ADDRESS_OLD_TIME      + 4      // provide 4 bytes
+#define ADDRESS_SAVE_COUNT   ADDRESS_OLD_DATE      + 4      // provide 4  bytes
+#define ADDRESS_START_METER  ADDRESS_SAVE_COUNT    + 4      // provide 4  bytes for meter data at first start 
+#define ADDRESS_START_PERIOD ADDRESS_START_METER   + 4      // provide 4  bytes for meter data for start of period
+#define ADDRESS_MONTH_01     ADDRESS_START_PERIOD  + 4      // provide 4  bytes for meter data at month end of first month of period
+#define NEXT_FREE_ADDRESS    ADDRESS_MONTH_01      + ( 4 * 12 )  
+
+-> some functions
+
+bool reset_Counter( )                                       // resets the RTC and clears RAM
+
+bool set_Counter_Mode( )                                    // sets RTC to counter mode
+
+uint8_t get_Mode( )                                         // reads mode
+
+--> data transfer funtions to and from RTC
+
+bool set_Byte( int8_t address, int8_t value )               // writes a single byte to the given RTC address
+
+int8_t get_Byte( int8_t address )                           // reads  a single byte from the given RTC address
+
+bool set_Integer( int8_t address, int16_t value )           // writes a two-byte value to the given RTC address
+
+bool get_Integer( int8_t address, int16_t &value )          // reads  a two-byte value from the given RTC address
+
+bool set_My_4_bytes( int8_t address, int32_t value )        // writes a four-byte value to the given RTC address
+
+bool get_My_4_bytes( int8_t address, uint32_t &value )      // reads  a four-byte value from the given RTC address
+
+bool set_Counter( int8_t address, int32_t value )           // writes a three-byte value from the counter RTC address
+
+bool get_Counter( int8_t address, uint32_t &count  )        // reads  a three-byte value from the counter RTC address
+
+--> date time functions, 3 hex bytes each for hour&min&sec and day&month&year
+
+void get_Time( int8_t address, uint8_t &o_hour, uint8_t &o_min, uint8_t &o_sec )    
+
+bool set_Time( int8_t address, uint8_t o_hour, uint8_t o_min, uint8_t o_sec )     
+
+void get_Date( int8_t address, uint8_t &day, uint8_t &month, int &year )
+
+bool set_Date( int8_t address, uint8_t day, uint8_t month, int year )
+
+bool set_month( int8_t month, int32_t new_count )            // writes aggregated counts to a monthy value in RTC RAM
+
+void Init_counter( )                                         // init RTC counter and some data values
+
+void setup()
+
+void loop()
+{
+   mqtt.loop();
+   error = false;           // reset error flag
+  //
+  // Init RTC Counter if Pin set
+  //
+  if ( digitalRead( RESET_PIN ) == 0 )
+  {
+    Init_counter( );
+  }
+  if ( MQTT_start_consumption > 0 )
+           Init_counter( );
+  //
+  // check WiFi connection
+  //
+  if ( WiFi.status() != WL_CONNECTED )
+    Gas_WiFi_reconnect();
+  //
+  // check if we have a value for start of measuring period  
+  //
+  if ( MQTT_start_period > 0 )
+  {
+     if ( set_My_4_bytes( ADDRESS_START_PERIOD, MQTT_start_period ) == false )
+     {
+
+     }
+     else
+     {
+        MQTT_start_period = 0;
+     }   
+  }
+  //
+  // read current time from ESP
+  //
+  get_LocalTime( );
+  //
+  //   read current counter from counter location
+  //
+  if ( get_Counter( ADDRESS_COUNTER, new_count ) != true ) 
+  {
+     error     = true;
+     new_count = 0;                  // to do
+  }   
+  //
+  //   read old counter from RAM
+  //
+  if ( get_My_4_bytes( ADDRESS_OLD_COUNTER, old_count ) != true ) old_count = 0 ;
+  //
+  //   get save counter
+  //
+  if ( get_My_4_bytes( ADDRESS_SAVE_COUNT, save_delta_count ) != true ) save_delta_count = 0 ;
+  //
+  //   get start consumption
+  //
+  if ( get_My_4_bytes( ADDRESS_START_METER, start_consumption ) != true ) start_consumption = 0 ;
+  //
+  //   get period consumption
+  //
+  if ( get_My_4_bytes( ADDRESS_START_PERIOD, start_period ) != true ) start_period = 0 ;
+  //
+  //   save current counter to RAM
+  //
+  if ( set_My_4_bytes( ADDRESS_OLD_COUNTER, new_count ) == false )
+  {
+
+  }
+  //
+  // read last time
+  //
+  get_Time( ADDRESS_OLD_TIME, old_hour, old_min, old_sec );
+  //
+  // save Date & time of current read  in RAM
+  // TO DO check whether period per read or per xmitt success
+  if ( set_Time( ADDRESS_OLD_TIME, Gas_hour, Gas_min, Gas_sec ) == false )
+  {
+
+  }
+  //
+  // read date of last readoute
+  get_Date( ADDRESS_OLD_DATE, old_day, old_month, old_year );
+  //
+  // save data for current month
+  //
+  if ( set_month( Gas_month, new_count) == false )
+  {
+
+  }
+
+  //
+  //
+  set_Date( ADDRESS_OLD_DATE, Gas_day, Gas_month, Gas_year );
+  // calculate period between 2 reads
+  period =   ( Gas_hour - old_hour ) * 3600L +
+             ( Gas_min  - old_min  ) *   60  +
+             ( Gas_sec  - old_sec );
+  new_time = ( Gas_hour ) * 3600L +
+             ( Gas_min  ) *   60  +
+             ( Gas_sec  );
+  old_time = ( old_hour ) * 3600L +
+             ( old_min  ) *   60  +
+             ( old_sec );
+  //
+  // calculate counts between two read outs
+  //
+  delta_count       = new_count - old_count;
+  save_delta_count  = save_delta_count + delta_count;
+  //
+  // calculate absolute consumption bewteen two reads
+  //
+  energy1      = ( mexp3_per_count * brennwert * zustandszahl * delta_count )      ; // in kWh  : Gas m³ * Brennwert * Zustandszahl
+  energy2      = ( mexp3_per_count * brennwert * zustandszahl * save_delta_count ) ; // in kWh  : Gas m³ * Brennwert * Zustandszahl
+  total_energy = ( mexp3_per_count * brennwert * zustandszahl * new_count )        ; // in kWh  : Gas m³ * Brennwert * Zustandszahl
+  consumption  = ( mexp3_per_count * new_count + 0.001 * start_consumption )       ; // Gas m³ 
+  //
+  // prepare data for MQTT & Thingsspeak
+  dtostrf( total_energy,     12, 3, valueString1 );
+  dtostrf( energy1,          12, 3, valueString2 );
+  dtostrf( energy2,          12, 3, valueString3 );
+  dtostrf( new_count,        10, 0, valueString4 );
+  dtostrf( consumption,      12, 3, valueString5 );
+  dtostrf( new_time,         10, 0, valueString6 );
+  dtostrf( old_time,         10, 0, valueString7 );
+  dtostrf( ( 3600L / ( new_time-old_time ) * energy2 ),    12, 3, valueString8  );
+  dtostrf( start_consumption,                              10, 0, valueString9  );
+  dtostrf( start_period,                                   10, 0, valueString10 );
+  sprintf( valueString11, "%02d:%02d:%02d", Gas_hour, Gas_min, Gas_sec );
+  //
+  // calculate consumption per hour or minute
+  //
+  //
+  // send data to Thingsspeak fields
+  //
+  ThingSpeak.setField( Thingspeak_1, valueString1 );            // total consumption
+  ThingSpeak.setField( Thingspeak_2, valueString2  );           // consumption between two readouts
+  ThingSpeak.setField( Thingspeak_3, valueString3  );           // consumption between two Thingspeak updates
+  ThingSpeak.setField( Thingspeak_4, valueString4  );           // total counts 
+  ThingSpeak.setField( Thingspeak_5, valueString5  );           // Gas m³
+  //
+  // write to the ThingSpeak channel
+  //
+  if ( Send_data( ))
+  {
+    save_delta_count = 0;
+    // save date of current readout  in RAM
+    set_Date( ADDRESS_OLD_DATE, Gas_day, Gas_month, Gas_year );
+
+  }
+  //
+  // publish to MQTT
+  //
+  publish_topic( "Gas/Time",         valueString11 );
+  publish_topic( "Gas/Total_kWh",    valueString1 );
+  publish_topic( "Gas/Current_kWh",  valueString3 );
+  publish_topic( "Gas/Counts",       valueString4 );
+  publish_topic( "Gas/Volume",       valueString5 );
+  publish_topic( "Gas/Power_kW",     valueString8 );
+  publish_topic( "Gas/Start",        valueString9 );
+  publish_topic( "Gas/Period_Start", valueString10 );
+  if ( error == true )
+    publish_topic( "Gas/Status",     "Error" );
+  else
+    publish_topic( "Gas/Status",     "OK" );
+    
+// shall we sleep or wait 30 seconds until next readout 
+
+ if ( digitalRead( UPDATE_PIN ) == 1 )      // pull UPDATE pin LOW to prevent sleep
+  {
+    Serial.println( "Going to sleep" );
+    delay( 1000 );
+    ESP.deepSleep( 111 * 1000 * 1000 );
+  }
+  else
+  {
+    Serial.println( "Waiting 30 seconds" );
+    delay( 30000 );
+  }
+}
