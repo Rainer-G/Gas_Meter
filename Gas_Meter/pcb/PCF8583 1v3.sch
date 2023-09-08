@@ -11573,6 +11573,8 @@ Grid 2.54 mm&lt;p&gt;
 <plain>
 <text x="10.16" y="38.1" size="1.016" layer="91">Hall Sensor AH3661UA
 nur 1 mal an passender Stelle einsetzen</text>
+<text x="40.64" y="38.1" size="1.016" layer="91">Jumper J2 legt die TWI Adresse fest
+Brücke 1 - 2 : 0x50</text>
 </plain>
 <instances>
 <instance part="IC1" gate="G$1" x="27.94" y="58.42"/>
