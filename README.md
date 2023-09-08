@@ -1,4 +1,4 @@
-#Gas Verbrauch messen und verarbeiten 
+# Gas Verbrauch messen und verarbeiten 
 
 ## Funktion
 
@@ -8,7 +8,7 @@ Die Daten werden mit Hilfe eines ESP8266 über die I²C SAchnittstelle ausgelese
 Über das MQTT Protokoll werden die Daten an einen lokalen Broker weitergeleitet, Daten werden nicht ins Internet hochgeladen.
 Eine 3 Volt Knopfzelle versorgt den Baustein mit Energie und erhält die Daten bei Stromausfall.
 
-#Diese Daten werden im RTC RAM gespeichert
+Diese Daten werden im RTC RAM gespeichert
 
 1. Zählimpulse
 2. Zählerstand zu Beginn der Messung ( Counts = 0 )
@@ -16,7 +16,7 @@ Eine 3 Volt Knopfzelle versorgt den Baustein mit Energie und erhält die Daten b
 4. monatlicherVerbrauch in m³
 5. Datum und Uhrzeit des letzen Auslesens des RTC Bausteins
 
-#Diese Daten werden über MQTT an den Broker gesendet
+Diese Daten werden über MQTT an den Broker gesendet
 
 1. Uhrzeit 
 2. Gesamtverbrauch in kWh
@@ -28,7 +28,7 @@ Eine 3 Volt Knopfzelle versorgt den Baustein mit Energie und erhält die Daten b
 8. nach Bedarf monatlicher Verbrauch
 9. Status ( OK wenn Zugriff auf den RTC Baustein möglich )
 
-#Diese Daten/Kommandos können vom Broker an den ESP8266 gesendet werden
+Diese Daten/Kommandos können vom Broker an den ESP8266 gesendet werden
 
 1. Publish consumption of a single month or month 1 to 12 
  * SYNTAX  : "Energy/Test/command"
