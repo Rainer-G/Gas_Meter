@@ -61,3 +61,10 @@ Eine 3 Volt Knopfzelle versorgt den Baustein mit Energie und erhält die Daten b
  * PAYLOAD : "InitC, x"
  * value for x : consumption in liter
 
+## Vorbereitung
+
+* in Gas_WiFi SSID und Passwort eintragen
+* in Gas_MQTT IP Adresse des MQTT Broker eintragen
+* ggfs. Thinkspeak aktivieren und Channel und Key eintragen
+* Topic für MQTT an die eigenen Wünsche anpassen
+  
