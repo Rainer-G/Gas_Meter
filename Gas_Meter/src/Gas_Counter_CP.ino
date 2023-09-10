@@ -38,7 +38,7 @@
 // using D6 for controlling Sleep Mode
 //**********************************************************************************
 //
-bool      sleep                = true;             // allow sleep
+bool      sleep                = false;//true;             // allow sleep
 bool      error                = false;            // report error to MQTT
 bool      log_msg              = true;             // for Test only, set to false when in operation
 uint32_t  old_time;                                // in seconds
@@ -106,20 +106,6 @@ uint8_t byte2bcd( uint8_t value )
   return (( value / 10) << 4 ) + ( value % 10 );
 }
 
-bool reset_Counter( )
-{
-  Wire.beginTransmission( COUNTER_ADDRESS );
-
-  Wire.write( CONTROL_ADDRESS );
-
-  Wire.write( 0x20 );               // address 00 control/status set to counter
-  
-  for ( int i = 0; i <= 15; i++)
-     Wire.write( 0x00 );            // clear RTC fields
-
-  return ( Wire.endTransmission( true ) == 0 );
-
-}
 
 bool set_Counter_Mode( )
 {
@@ -363,15 +349,21 @@ char* logprint ( const char* format, ... )
 //
 void Init_counter( )
 {
-  reset_Counter( );                                // only needed for first init
-  set_Counter_Mode( );                             // only needed for first init
-  set_Counter    ( ADDRESS_COUNTER, 0 );          // do not clear counter after reset
-  set_My_4_bytes ( ADDRESS_OLD_COUNTER, 0 );      // do not clear counter after reset
-  set_My_4_bytes ( ADDRESS_START_METER, 0 );      // do not clear start consumption after reset
+  logprint( "***  Set Counter Mode *******" );
+  if ( set_Counter_Mode( ) == false )
+     logprint( "***  failed to set Counter Mode *******");        // only needed for first init
+  logprint( "***  Clear counter data *******" );
+  if ( set_Counter    ( ADDRESS_COUNTER, 0 ) == false )
+     logprint( "***  Failed to clear counter *******");           // do not clear counter after reset
+  if ( set_My_4_bytes ( ADDRESS_OLD_COUNTER, 0 ) == false )
+     logprint( "***  Failed to clear old counter data *******");  // do not clear counter after reset
+  //set_My_4_bytes ( ADDRESS_START_METER, 0 );                   // do not clear start consumption after reset
+  logprint( "***  Clear Time *******" );
   set_Time       ( ADDRESS_OLD_TIME, 0, 0, 0 );
   //
   // init old time
   //
+  logprint( "***  Set Time *******" );
   set_Time( ADDRESS_OLD_TIME, Gas_hour, Gas_min, Gas_sec ); //
   //
 }
@@ -460,8 +452,8 @@ void init_counter_and_data( )                           // set start value for c
    uint32_t cmd_data  = 0;
    String   value3;
    
-   Init_counter;
-
+   Init_counter( );
+  
    if ( MQTT_command.indexOf(',') > 0 )
    {
       value3    = MQTT_command.substring( MQTT_command.indexOf(',') + 1); 
@@ -659,6 +651,9 @@ void loop()
   //
   if ( get_My_4_bytes( ADDRESS_OLD_COUNTER, old_count ) != true ) old_count = 0 ;
   //
+  logprint( "***  New Count %10d Old Count %10d\n\r", new_count, old_count );
+
+  //
   //   get start consumption
   //
   if ( get_My_4_bytes( ADDRESS_START_METER, start_consumption ) != true ) start_consumption = 0 ;
@@ -727,8 +722,8 @@ void loop()
   //dtostrf( new_time,         10, 0, valueString6 );
   //dtostrf( old_time,         10, 0, valueString7 );
   dtostrf( ( 3600L / ( new_time - old_time ) * energy1 ),  12, 3, valueString5  );
-  dtostrf( start_consumption,                              10, 0, valueString6  );
-  dtostrf( start_period,                                   10, 0, valueString7 );
+  dtostrf( ( start_consumption / 1000.0 ),                 12, 3, valueString6  );
+  dtostrf( ( start_period / 1000.0 ),                      12, 3, valueString7 );
   sprintf( valueString8, "%02d:%02d:%02d", Gas_hour, Gas_min, Gas_sec );
   //
   // calculate consumption per hour or minute
@@ -754,9 +749,9 @@ void loop()
   //
     publish_topic( "Time", valueString8 );
     publish_topic( "Total_kWh", valueString1 );
+    publish_topic( "Power_kW", valueString5 );
     publish_topic( "Counts", valueString4 );
     publish_topic( "Volume", valueString3 );
-    publish_topic( "Power_kW", valueString5 );
     publish_topic( "Start", valueString6 );
     publish_topic( "Period_Start", valueString7 );
     if ( error == true )
